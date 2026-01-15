@@ -1,0 +1,67 @@
+name: Mirror code to public repo
+
+on:
+  # Auto-mirror on any push (branches + tags)
+  push:
+    branches:
+      - "**"
+    tags:
+      - "**"
+
+  # Manual run button in Actions tab
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Optional: branch/tag/SHA to mirror (leave blank to mirror everything)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mirror refs to public repo
+        env:
+          SRC_REPO: ${{ github.repository }}                 # Azronix-Limited/vemorak-sdks
+          DEST_REPO: chidimez/vemorak-sdks
+          SRC_TOKEN: ${{ github.token }}                     # reads private source repo
+          DEST_TOKEN: ${{ secrets.PUBLIC_MIRROR_TOKEN }}     # PAT writes public destination repo
+          INPUT_REF: ${{ github.event.inputs.ref }}
+        run: |
+          set -euo pipefail
+
+          echo "SRC_REPO=$SRC_REPO"
+          echo "DEST_REPO=$DEST_REPO"
+          echo "INPUT_REF=${INPUT_REF:-}"
+
+          # Clone the private repo as a mirror using GITHUB_TOKEN
+          git clone --mirror "https://x-access-token:${SRC_TOKEN}@github.com/${SRC_REPO}.git" repo.git
+          cd repo.git
+
+          # If manual input ref is provided, mirror only that ref (and its tags)
+          if [ -n "${INPUT_REF:-}" ]; then
+            echo "Mirroring only ref: $INPUT_REF"
+
+            # Fetch the specific ref
+            git fetch --prune origin "${INPUT_REF}:${INPUT_REF}" || git fetch --prune origin "${INPUT_REF}"
+
+            # Set push URL for destination
+            git remote set-url --push origin "https://x-access-token:${DEST_TOKEN}@github.com/${DEST_REPO}.git"
+
+            # Push the specific ref
+            git push origin "refs/heads/${INPUT_REF}:refs/heads/${INPUT_REF}" 2>/dev/null || true
+            git push origin "refs/tags/${INPUT_REF}:refs/tags/${INPUT_REF}" 2>/dev/null || true
+
+            # Also push any tags that are reachable (best-effort)
+            git push --tags origin || true
+
+            echo "Done (single ref mode)."
+            exit 0
+          fi
+
+          # Otherwise mirror EVERYTHING (all branches/tags/history)
+          git remote set-url --push origin "https://x-access-token:${DEST_TOKEN}@github.com/${DEST_REPO}.git"
+          git push --mirror
