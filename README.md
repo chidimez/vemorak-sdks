@@ -178,7 +178,7 @@ The SDKs are the **integration layer** between applications and the protocol.
 
 ## License
 
-Specify your license here (e.g. Apache-2.0, MIT).
+ MIT
 
 ---
 
